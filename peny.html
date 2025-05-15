@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Crypto Portfolio Tracker</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background-color: #1e1e1e;
+      color: #f0f0f0;
+      padding: 20px;
+    }
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      margin-top: 20px;
+      background-color: #2c2c2c;
+    }
+    th, td {
+      border: 1px solid #555;
+      padding: 8px;
+      text-align: center;
+      cursor: pointer;
+      vertical-align: middle;
+    }
+    th {
+      background-color: #333;
+    }
+    .green {
+      color: #00ff00;
+    }
+    .red {
+      color: #ff4040;
+    }
+    #usdTryRate {
+      background-color: #ff4040;
+      color: #fff;
+      font-weight: bold;
+      display: inline-block;
+      padding: 10px 20px;
+      margin-bottom: 10px;
+      border-radius: 6px;
+    }
+    .coin-logo {
+      width: 20px;
+      height: 20px;
+      vertical-align: middle;
+      margin-right: 8px;
+    }
+    .highlight-green {
+      background-color: rgba(0, 255, 0, 0.2);
+    }
+    .highlight-red {
+      background-color: rgba(255, 0, 0, 0.2);
+    }
+    /* Reserve space for delta inside TRY cell */
+    .try-cell {
+      position: relative;
+      min-width: 140px;
+      white-space: nowrap;
+    }
+    .mini-delta {
+      font-size: 0.75em;
+      position: absolute;
+      right: 6px;
+      top: 50%;
+      transform: translateY(-50%);
+      opacity: 0.8;
+      pointer-events: none;
+      user-select: none;
+      font-weight: normal;
+    }
+  </style>
+</head>
+<body>
+
+<h2>📊 My Cryptocurrency Portfolio</h2>
+<div id="usdTryRate">USD/TRY: Loading...</div>
+<p id="lastUpdated">Last Updated: -</p>
+
+<table id="cryptoTable">
+  <thead>
+    <tr>
+      <th onclick="sortTable(0)">Trend</th>
+      <th onclick="sortTable(1)">Cryptocurrency</th>
+      <th onclick="sortTable(2)">Amount Held</th>
+      <th onclick="sortTable(3)">Price (USD)</th>
+      <th onclick="sortTable(4)">Value (USD)</th>
+      <th onclick="sortTable(5)">Value (TRY)</th>
+    </tr>
+  </thead>
+  <tbody></tbody>
+</table>
+
+<h3>Total Value in <span class="green">TRY</span>: 
+  <span id="totalTry">-</span> 
+  <span id="tryDelta"></span>
+</h3>
+
+<canvas id="valueChart" width="1000" height="300"></canvas>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+const holdings = {
+  "algorand": 165.5111,
+  "cosmos": 1.5111,
+  "audius": 208.4357,
+  "bitcoin": 0.03000265,
+  "compound-governance-token": 0.03095203,
+  "dogecoin": 100.0,
+  "polkadot": 0.3309,
+  "eos": 2.56,
+  "ethereum": 0.31216363,
+  "filecoin": 0.1479,
+  "hedera-hashgraph": 2415.11,
+  "decentraland": 11.6838,
+  "neo": 0.247,
+  "pepe": 1013000.0,
+  "shiba-inu": 2108063.0,
+  "ripple": 580.6248,
+  "tezos": 1.610784
+};
+
+let previousPrices = {};
+let previousTryValues = {};
+let usdToTry = 1;
+let previousTotalTry = null;
+let lastDelta = null;
+
+const tbody = document.querySelector('#cryptoTable tbody');
+const totalTryEl = document.getElementById("totalTry");
+const tryDeltaEl = document.getElementById("tryDelta");
+const lastUpdatedEl = document.getElementById("lastUpdated");
+const usdTryEl = document.getElementById("usdTryRate");
+
+const chart = new Chart(document.getElementById("valueChart").getContext("2d"), {
+  type: 'line',
+  data: {
+    labels: [],
+    datasets: [{
+      label: 'Total Value (TRY)',
+      data: [],
+      borderColor: '#00ff00',
+      backgroundColor: 'rgba(0,255,0,0.1)',
+      tension: 0.1
+    }]
+  },
+  options: {
+    responsive: true,
+    animation: false,
+    plugins: {
+      legend: { labels: { color: "#fff" } }
+    },
+    scales: {
+      x: { ticks: { color: "#aaa" } },
+      y: { ticks: { color: "#aaa" } }
+    }
+  }
+});
+
+async function fetchExchangeRate() {
+  try {
+    const res = await fetch("https://api.coingecko.com/api/v3/simple/price?ids=usd&vs_currencies=try");
+    const data = await res.json();
+    usdToTry = data.usd.try;
+    usdTryEl.textContent = `USD/TRY: ₺${usdToTry.toFixed(2)}`;
+  } catch (e) {
+    usdTryEl.textContent = `USD/TRY: Failed`;
+    console.error("Exchange rate fetch failed", e);
+  }
+}
+
+async function fetchPrices() {
+  try {
+    const ids = Object.keys(holdings).join(',');
+    const url = `https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&ids=${ids}`;
+    const res = await fetch(url);
+    const data = await res.json();
+
+    await fetchExchangeRate();
+
+    let totalTry = 0;
+    tbody.innerHTML = "";
+    let tryChanges = [];
+
+    data.forEach(coin => {
+      const id = coin.id;
+      const amount = holdings[id];
+      const priceUsd = coin.current_price;
+      const valueUsd = priceUsd * amount;
+      const valueTry = valueUsd * usdToTry;
+      totalTry += valueTry;
+
+      let trend = "";
+      if (previousPrices[id] !== undefined) {
+        if (priceUsd > previousPrices[id]) trend = `<span class="green">▲</span>`;
+        else if (priceUsd < previousPrices[id]) trend = `<span class="red">▼</span>`;
+      }
+
+      const valueChange = previousTryValues[id] !== undefined ? valueTry - previousTryValues[id] : 0;
+      tryChanges.push({ id, delta: valueChange });
+
+      previousPrices[id] = priceUsd;
+      previousTryValues[id] = valueTry;
+
+      // Price formatting: 10 decimals for shiba-inu and pepe, else 2 decimals with commas
+      const priceFormatted = (id === "shiba-inu" || id === "pepe")
+        ? `$${priceUsd.toFixed(10)}`
+        : `$${priceUsd.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+      const row = document.createElement('tr');
+      const tryCellId = `try-${id}`;
+      row.innerHTML = `
+        <td>${trend}</td>
+        <td><img src="${coin.image}" alt="${coin.name} logo" class="coin-logo">${coin.name}</td>
+        <td>${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 8 })}</td>
+        <td>${priceFormatted}</td>
+        <td>$${valueUsd.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+        <td id="${tryCellId}" class="try-cell">₺${valueTry.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+      `;
+      tbody.appendChild(row);
+    });
+
+    // Clear previous highlights and deltas first
+    document.querySelectorAll('.mini-delta').forEach(el => el.remove());
+    document.querySelectorAll('.highlight-green').forEach(el => el.classList.remove('highlight-green'));
+    document.querySelectorAll('.highlight-red').forEach(el => el.classList.remove('highlight-red'));
+
+    // Highlight top increase/decrease
+    const filteredChanges = tryChanges.filter(x => x.delta !== 0);
+    if (filteredChanges.length >= 1) {
+      // Max increase
+      const maxInc = filteredChanges.reduce((a,b) => (a.delta > b.delta ? a : b));
+      // Max decrease
+      const minDec = filteredChanges.reduce((a,b) => (a.delta < b.delta ? a : b));
+
+      [maxInc, minDec].forEach(({ id, delta }) => {
+        const cell = document.getElementById(`try-${id}`);
+        if (!cell) return;
+        const deltaSpan = document.createElement("span");
+        deltaSpan.className = `mini-delta ${delta >= 0 ? 'green' : 'red'}`;
+        deltaSpan.textContent = `(${delta >= 0 ? '+' : '-'}₺${Math.abs(delta).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})`;
+        cell.appendChild(deltaSpan);
+        cell.classList.add(delta >= 0 ? 'highlight-green' : 'highlight-red');
+
+        setTimeout(() => {
+          deltaSpan.remove();
+          cell.classList.remove('highlight-green', 'highlight-red');
+        }, 5000);
+      });
+    }
+
+    if (previousTotalTry !== null) {
+      const delta = totalTry - previousTotalTry;
+      if (delta !== 0) lastDelta = delta;
+    }
+
+    totalTryEl.textContent = `₺${totalTry.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    if (lastDelta !== null) {
+      const sign = lastDelta >= 0 ? "+" : "-";
+      const absDelta = Math.abs(lastDelta).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      tryDeltaEl.innerHTML = `<span class="${lastDelta >= 0 ? 'green' : 'red'}">(${sign}₺${absDelta})</span>`;
+    }
+
+    previousTotalTry = totalTry;
+    lastUpdatedEl.textContent = `Last Updated: ${new Date().toLocaleTimeString()}`;
+
+    // Update chart
+    chart.data.labels.push(new Date().toLocaleTimeString());
+    chart.data.datasets[0].data.push(totalTry);
+    chart.update();
+
+  } catch (err) {
+    console.error("Price fetch failed", err);
+  }
+}
+
+let sortDirection = true;
+function sortTable(colIndex) {
+  const rows = Array.from(tbody.querySelectorAll("tr"));
+  rows.sort((a, b) => {
+    const aText = a.children[colIndex].textContent.replace(/[^\d\.-]/g, '');
+    const bText = b.children[colIndex].textContent.replace(/[^\d\.-]/g, '');
+    const aVal = isNaN(parseFloat(aText)) ? aText : parseFloat(aText);
+    const bVal = isNaN(parseFloat(bText)) ? bText : parseFloat(bText);
+
+    if (typeof aVal === "number" && typeof bVal === "number") {
+      return sortDirection ? aVal - bVal : bVal - aVal;
+    } else {
+      return sortDirection
+        ? aVal.toString().localeCompare(bVal)
+        : bVal.toString().localeCompare(aVal);
+    }
+  });
+
+  sortDirection = !sortDirection;
+  rows.forEach(row => tbody.appendChild(row));
+}
+
+fetchPrices();
+setInterval(fetchPrices, 10000);
+</script>
+
+</body>
+</html>
