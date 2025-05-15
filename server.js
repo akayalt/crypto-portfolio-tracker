@@ -1,12 +1,17 @@
 const express = require('express');
 const axios = require('axios');
 const sqlite3 = require('sqlite3').verbose();
+const path = require('path');
 const cors = require('cors');
-const app = express();
-const PORT = 3000;
 
-// CORS to allow frontend requests
+const app = express();
+const PORT = process.env.PORT || 3000;
+
+// Enable CORS for API requests from frontend
 app.use(cors());
+
+// Serve static files (your HTML, CSS, JS)
+app.use(express.static(path.join(__dirname, 'public')));
 
 // SQLite DB
 const db = new sqlite3.Database('./data.db');
@@ -16,7 +21,7 @@ db.run(`CREATE TABLE IF NOT EXISTS total_values (
   total_try REAL
 )`);
 
-// Coin holdings
+// Your coin holdings
 const holdings = {
   "algorand": 165.5111,
   "cosmos": 1.5111,
@@ -37,32 +42,23 @@ const holdings = {
   "tezos": 1.610784
 };
 
-// Fetch & store total TRY value
+// Fetch and store total TRY value
 async function fetchAndStoreTotalTry() {
   try {
     const ids = Object.keys(holdings).join(',');
-    const priceRes = await axios.get(`https://api.coingecko.com/api/v3/coins/markets`, {
-      params: {
-        vs_currency: 'usd',
-        ids
-      }
+    const priceRes = await axios.get('https://api.coingecko.com/api/v3/coins/markets', {
+      params: { vs_currency: 'usd', ids }
     });
-
-    const exchangeRes = await axios.get(`https://api.coingecko.com/api/v3/simple/price`, {
-      params: {
-        ids: 'usd',
-        vs_currencies: 'try'
-      }
+    const exchangeRes = await axios.get('https://api.coingecko.com/api/v3/simple/price', {
+      params: { ids: 'usd', vs_currencies: 'try' }
     });
 
     const usdToTry = exchangeRes.data.usd.try;
     let totalTry = 0;
 
     priceRes.data.forEach(coin => {
-      const id = coin.id;
       const priceUsd = coin.current_price;
-      const valueUsd = holdings[id] * priceUsd;
-      totalTry += valueUsd * usdToTry;
+      totalTry += holdings[coin.id] * priceUsd * usdToTry;
     });
 
     const timestamp = new Date().toISOString();
@@ -78,7 +74,7 @@ async function fetchAndStoreTotalTry() {
 setInterval(fetchAndStoreTotalTry, 10000);
 fetchAndStoreTotalTry();
 
-// API to get historical data
+// API endpoint to get historical data
 app.get('/history', (req, res) => {
   db.all(`SELECT * FROM total_values ORDER BY timestamp ASC`, (err, rows) => {
     if (err) return res.status(500).json({ error: err.message });
@@ -86,4 +82,12 @@ app.get('/history', (req, res) => {
   });
 });
 
-app.listen(PORT, () => console.log(`Server running at http://localhost:${PORT}`));
+// Serve index.html on root
+app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
+// Start server
+app.listen(PORT, () => {
+  console.log(`Server running at http://localhost:${PORT}`);
+});
