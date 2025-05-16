@@ -69,10 +69,14 @@
     }
     .highlight-green { background-color: rgba(0, 255, 0, 0.2); }
     .highlight-red { background-color: rgba(255, 0, 0, 0.2); }
-    #valueChart {
-      display: block;
-      max-width: 900px;
+    .scroll-wrapper {
+      overflow-x: auto;
       margin: 20px auto;
+      max-width: 100%;
+    }
+    #valueChart {
+      min-width: 1000px;
+      max-width: none;
       background-color: #222;
       border: 1px solid #444;
       padding: 10px;
@@ -99,9 +103,7 @@
       <th onclick="sortTable(5)">Value (TRY)</th>
     </tr>
   </thead>
-  <tbody>
-    <!-- Rows inserted dynamically -->
-  </tbody>
+  <tbody></tbody>
 </table>
 
 <div id="totalSummary">
@@ -110,7 +112,9 @@
   <span id="tryDelta"></span>
 </div>
 
-<canvas id="valueChart" width="900" height="400"></canvas>
+<div class="scroll-wrapper">
+  <canvas id="valueChart" width="1200" height="400"></canvas>
+</div>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
@@ -173,7 +177,7 @@ const chart = new Chart(document.getElementById("valueChart").getContext("2d"), 
 
 async function loadHistoricalChartData() {
   try {
-    const res = await fetch('https://crypto-portfolio-tracker-1.onrender.com/history');
+    const res = await fetch('/history');
     const history = await res.json();
 
     chart.data.labels = [];
@@ -227,8 +231,7 @@ async function fetchPrices() {
 
       let trend = "";
       if (previousPrices[id] !== undefined) {
-        if (priceUsd > previousPrices[id]) trend = `<span class="green">▲</span>`;
-        else if (priceUsd < previousPrices[id]) trend = `<span class="red">▼</span>`;
+        trend = priceUsd > previousPrices[id] ? `<span class="green">▲</span>` : priceUsd < previousPrices[id] ? `<span class="red">▼</span>` : "";
       }
 
       const valueChange = previousTryValues[id] !== undefined ? valueTry - previousTryValues[id] : 0;
