@@ -12,33 +12,31 @@
       margin: 20px;
     }
     h1 { text-align: center; margin-bottom: 0.2em; }
-
     #summary {
       text-align: center;
       margin-bottom: 1em;
-      display: flex;
-      justify-content: center;
-      gap: 15px;
-      flex-wrap: wrap;
     }
     #usdTryRate {
-      background-color: #a22; /* dark red */
-      color: #fff;
+      background-color: #b00020;
+      color: white;
+      padding: 4px 8px;
+      border-radius: 4px;
       font-weight: bold;
-      padding: 5px 12px;
-      border-radius: 6px;
-      user-select: none;
+      display: inline-block;
     }
-
-    #totalTryContainer {
-      text-align: center;
-      margin: 20px 0;
+    #lastUpdated {
+      margin-left: 10px;
       font-weight: bold;
-      font-size: 1.4em;
-      color: #0f0;
-      user-select: none;
     }
-
+    #totalSummary {
+      text-align: left;
+      font-size: 1.2em;
+      margin: 20px 0 10px 0;
+    }
+    #totalTry, #tryDelta {
+      margin-left: 8px;
+      font-weight: bold;
+    }
     table {
       width: 100%;
       border-collapse: collapse;
@@ -85,23 +83,11 @@
 <body>
 
 <h1>Crypto Portfolio Tracker</h1>
-
-<!-- USD/TRY red colored cell -->
 <div id="summary">
-  <span id="usdTryRate">USD/TRY: --</span> |
-  <span id="tryDelta"></span> |
+  <span id="usdTryRate">USD/TRY: --</span>
   <span id="lastUpdated">Last Updated: --</span>
 </div>
 
-<!-- Chart -->
-<canvas id="valueChart" width="900" height="400"></canvas>
-
-<!-- Total Value (TRY) displayed separately between chart and table -->
-<div id="totalTryContainer">
-  Total Value (TRY): <span id="totalTry">₺0.00</span>
-</div>
-
-<!-- Crypto Table -->
 <table id="cryptoTable">
   <thead>
     <tr>
@@ -117,6 +103,14 @@
     <!-- Rows inserted dynamically -->
   </tbody>
 </table>
+
+<div id="totalSummary">
+  <strong>Total Value (TRY):</strong>
+  <span id="totalTry">₺0.00</span>
+  <span id="tryDelta"></span>
+</div>
+
+<canvas id="valueChart" width="900" height="400"></canvas>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
@@ -185,7 +179,6 @@ async function loadHistoricalChartData() {
     chart.data.labels = [];
     chart.data.datasets[0].data = [];
 
-    // Downsampling: one out of every 10 points
     for (let i = 0; i < history.length; i += 10) {
       const entry = history[i];
       const label = new Date(entry.timestamp).toLocaleString('tr-TR');
