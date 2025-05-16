@@ -175,6 +175,7 @@ const chart = new Chart(document.getElementById("valueChart").getContext("2d"), 
   }
 });
 
+// Load full history from backend and populate chart
 async function loadHistoricalChartData() {
   try {
     const res = await fetch('/history');
@@ -183,7 +184,7 @@ async function loadHistoricalChartData() {
     chart.data.labels = [];
     chart.data.datasets[0].data = [];
 
-    // We skip entries so the chart is not too crowded, but keep at least some points
+    // Sample every 10th point for readability
     for (let i = 0; i < history.length; i += 10) {
       const entry = history[i];
       const label = new Date(entry.timestamp).toLocaleString('tr-TR');
@@ -197,14 +198,12 @@ async function loadHistoricalChartData() {
   }
 }
 
+// Fetch USD/TRY exchange rate
 async function fetchExchangeRate() {
   try {
-    // Note: Your original code fetches "usd" price which may not exist in CoinGecko API, so changed to "usdtry" in external API
-    // But since your backend serves USD/TRY, we keep your original
-    const res = await fetch("https://api.coingecko.com/api/v3/simple/price?ids=usd&vs_currencies=try");
+    const res = await fetch("https://api.coingecko.com/api/v3/exchange_rates");
     const data = await res.json();
-    // Defensive fallback if data.usd.try is undefined:
-    usdToTry = data.usd?.try || 1;
+    usdToTry = data.rates.try.value || 1;
     usdTryEl.textContent = `USD/TRY: ₺${usdToTry.toFixed(2)}`;
   } catch (e) {
     usdTryEl.textContent = `USD/TRY: Failed`;
@@ -212,6 +211,12 @@ async function fetchExchangeRate() {
   }
 }
 
+// Format numbers with commas and fixed decimals
+function formatNumber(num, decimals = 2) {
+  return num.toLocaleString('en-US', { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+}
+
+// Fetch latest prices for table, update table and totals
 async function fetchPrices() {
   try {
     const ids = Object.keys(holdings).join(',');
@@ -233,122 +238,167 @@ async function fetchPrices() {
       const valueTry = valueUsd * usdToTry;
       totalTry += valueTry;
 
+      // Trend arrow
       let trend = "";
       if (previousPrices[id] !== undefined) {
         trend = priceUsd > previousPrices[id] ? `<span class="green">▲</span>` : priceUsd < previousPrices[id] ? `<span class="red">▼</span>` : "";
       }
 
+      // Value (TRY) delta for mini delta text
       const valueChange = previousTryValues[id] !== undefined ? valueTry - previousTryValues[id] : 0;
       tryChanges.push({ id, delta: valueChange });
 
       previousPrices[id] = priceUsd;
       previousTryValues[id] = valueTry;
 
-      const priceFormatted = (id === "shiba-inu" || id === "pepe")
-        ? `$${priceUsd.toFixed(10)}`
-        : `$${priceUsd.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+      // Price (USD) formatting with commas; for some coins with tiny prices show more decimals
+      let priceFormatted;
+      if (id === "shiba-inu" || id === "pepe") {
+        priceFormatted = `$${priceUsd.toFixed(10)}`;
+      } else {
+        priceFormatted = `$${formatNumber(priceUsd)}`;
+      }
 
       const row = document.createElement('tr');
-      const tryCellId = `try-${id}`;
       row.innerHTML = `
         <td>${trend}</td>
         <td><img src="${coin.image}" alt="${coin.name} logo" class="coin-logo">${coin.name}</td>
-        <td>${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 8 })}</td>
+        <td>${formatNumber(amount, 4)}</td>
         <td>${priceFormatted}</td>
-        <td>$${valueUsd.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-        <td id="${tryCellId}" class="try-cell">₺${valueTry.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+        <td>$${formatNumber(valueUsd)}</td>
+        <td class="try-cell" id="try-${id}">₺${formatNumber(valueTry)}<span class="mini-delta" id="delta-${id}"></span></td>
       `;
+
       tbody.appendChild(row);
     });
 
-    // Clear old highlights and mini-deltas
-    document.querySelectorAll('.mini-delta').forEach(el => el.remove());
-    document.querySelectorAll('.highlight-green').forEach(el => el.classList.remove('highlight-green'));
-    document.querySelectorAll('.highlight-red').forEach(el => el.classList.remove('highlight-red'));
-
-    const filteredChanges = tryChanges.filter(x => x.delta !== 0);
-    if (filteredChanges.length >= 1) {
-      const maxInc = filteredChanges.reduce((a,b) => (a.delta > b.delta ? a : b));
-      const minDec = filteredChanges.reduce((a,b) => (a.delta < b.delta ? a : b));
-
-      [maxInc, minDec].forEach(({ id, delta }) => {
-        const cell = document.getElementById(`try-${id}`);
-        if (!cell) return;
-        const deltaSpan = document.createElement("span");
-        deltaSpan.className = `mini-delta ${delta >= 0 ? 'green' : 'red'}`;
-        deltaSpan.textContent = `(${delta >= 0 ? '+' : '-'}₺${Math.abs(delta).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})`;
-        cell.appendChild(deltaSpan);
-        cell.classList.add(delta >= 0 ? 'highlight-green' : 'highlight-red');
-
-        setTimeout(() => {
-          deltaSpan.remove();
-          cell.classList.remove('highlight-green', 'highlight-red');
-        }, 5000);
-      });
-    }
-
+    // Calculate total delta for TRY
     if (previousTotalTry !== null) {
-      const delta = totalTry - previousTotalTry;
-      if (delta !== 0) lastDelta = delta;
+      lastDelta = totalTry - previousTotalTry;
+      tryDeltaEl.textContent = lastDelta > 0
+        ? `(+₺${formatNumber(lastDelta)})`
+        : lastDelta < 0
+          ? `(−₺${formatNumber(Math.abs(lastDelta))})`
+          : "";
+      tryDeltaEl.className = lastDelta > 0 ? "green" : lastDelta < 0 ? "red" : "";
     }
 
-    totalTryEl.textContent = `₺${totalTry.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-    if (lastDelta !== null) {
-      const sign = lastDelta >= 0 ? "+" : "-";
-      const absDelta = Math.abs(lastDelta).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-      tryDeltaEl.innerHTML = `<span class="${lastDelta >= 0 ? 'green' : 'red'}">(${sign}₺${absDelta})</span>`;
-    }
+    // Highlight the most increased and decreased TRY value coins for 10 seconds
+    highlightTryChanges(tryChanges);
 
     previousTotalTry = totalTry;
-    lastUpdatedEl.textContent = `Last Updated: ${new Date().toLocaleTimeString()}`;
+    totalTryEl.textContent = `₺${formatNumber(totalTry)}`;
 
-    // Append new data point, but avoid duplicates by checking last label timestamp
-    const nowLabel = new Date().toLocaleString('tr-TR');
-    const labels = chart.data.labels;
-    if (labels.length === 0 || labels[labels.length - 1] !== nowLabel) {
-      chart.data.labels.push(nowLabel);
-      chart.data.datasets[0].data.push(totalTry);
+    lastUpdatedEl.textContent = `Last Updated: ${new Date().toLocaleTimeString('tr-TR')}`;
 
-      // Keep max 300 points to avoid excessive data growing indefinitely
-      if (chart.data.labels.length > 300) {
-        chart.data.labels.shift();
-        chart.data.datasets[0].data.shift();
+    // Add mini delta texts inside TRY value cells
+    tryChanges.forEach(({ id, delta }) => {
+      const deltaSpan = document.getElementById(`delta-${id}`);
+      if (!deltaSpan) return;
+      if (delta > 0) {
+        deltaSpan.textContent = ` (+₺${formatNumber(delta)})`;
+        deltaSpan.className = "mini-delta green";
+      } else if (delta < 0) {
+        deltaSpan.textContent = ` (−₺${formatNumber(Math.abs(delta))})`;
+        deltaSpan.className = "mini-delta red";
+      } else {
+        deltaSpan.textContent = "";
       }
-      chart.update();
-    }
+    });
+
+    // Update chart with latest total TRY value
+    updateChart(totalTry);
 
   } catch (err) {
     console.error("Price fetch failed", err);
   }
 }
 
-let sortDirection = true;
-function sortTable(colIndex) {
-  const rows = Array.from(tbody.querySelectorAll("tr"));
-  rows.sort((a, b) => {
-    const aText = a.children[colIndex].textContent.replace(/[^\d\.-]/g, '');
-    const bText = b.children[colIndex].textContent.replace(/[^\d\.-]/g, '');
-    const aVal = isNaN(parseFloat(aText)) ? aText : parseFloat(aText);
-    const bVal = isNaN(parseFloat(bText)) ? bText : parseFloat(bText);
-
-    if (typeof aVal === "number" && typeof bVal === "number") {
-      return sortDirection ? aVal - bVal : bVal - aVal;
-    } else {
-      return sortDirection
-        ? aVal.toString().localeCompare(bVal)
-        : bVal.toString().localeCompare(aVal);
+function highlightTryChanges(tryChanges) {
+  // Clear previous highlights
+  Object.keys(holdings).forEach(id => {
+    const cell = document.getElementById(`try-${id}`);
+    if (cell) {
+      cell.classList.remove("highlight-green", "highlight-red");
     }
   });
 
-  sortDirection = !sortDirection;
+  if (tryChanges.length === 0) return;
+
+  // Find max increase and max decrease
+  let maxIncrease = { id: null, delta: -Infinity };
+  let maxDecrease = { id: null, delta: Infinity };
+
+  tryChanges.forEach(({ id, delta }) => {
+    if (delta > maxIncrease.delta) maxIncrease = { id, delta };
+    if (delta < maxDecrease.delta) maxDecrease = { id, delta };
+  });
+
+  // Apply highlights
+  if (maxIncrease.id) {
+    const cell = document.getElementById(`try-${maxIncrease.id}`);
+    if (cell && maxIncrease.delta > 0) {
+      cell.classList.add("highlight-green");
+      setTimeout(() => cell.classList.remove("highlight-green"), 10000);
+    }
+  }
+  if (maxDecrease.id) {
+    const cell = document.getElementById(`try-${maxDecrease.id}`);
+    if (cell && maxDecrease.delta < 0) {
+      cell.classList.add("highlight-red");
+      setTimeout(() => cell.classList.remove("highlight-red"), 10000);
+    }
+  }
+}
+
+function updateChart(totalTry) {
+  const now = new Date();
+  const label = now.toLocaleTimeString('tr-TR');
+
+  chart.data.labels.push(label);
+  chart.data.datasets[0].data.push(totalTry);
+
+  // Keep max 100 points to avoid overload
+  if (chart.data.labels.length > 100) {
+    chart.data.labels.shift();
+    chart.data.datasets[0].data.shift();
+  }
+
+  chart.update();
+}
+
+// Sorting function for table by column
+function sortTable(colIndex) {
+  const rows = Array.from(tbody.querySelectorAll('tr'));
+  let asc = true;
+  // Check current sorting order
+  if (tbody.dataset.sortedCol == colIndex) {
+    asc = tbody.dataset.sortedAsc === "true" ? false : true;
+  }
+  tbody.dataset.sortedCol = colIndex;
+  tbody.dataset.sortedAsc = asc;
+
+  rows.sort((a, b) => {
+    let aText = a.cells[colIndex].textContent.trim();
+    let bText = b.cells[colIndex].textContent.trim();
+
+    // For numbers, parse as floats, otherwise compare strings
+    const numA = parseFloat(aText.replace(/[^\d.-]/g, ""));
+    const numB = parseFloat(bText.replace(/[^\d.-]/g, ""));
+
+    if (!isNaN(numA) && !isNaN(numB)) {
+      return asc ? numA - numB : numB - numA;
+    }
+    return asc ? aText.localeCompare(bText) : bText.localeCompare(aText);
+  });
+
   rows.forEach(row => tbody.appendChild(row));
 }
 
-(async () => {
-  await loadHistoricalChartData();
-  await fetchPrices();
-  setInterval(fetchPrices, 10000);
-})();
+// Initial load
+loadHistoricalChartData();
+fetchPrices();
+setInterval(fetchPrices, 30_000);  // refresh prices every 30 seconds
 </script>
 
 </body>
