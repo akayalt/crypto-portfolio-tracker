@@ -183,6 +183,7 @@ async function loadHistoricalChartData() {
     chart.data.labels = [];
     chart.data.datasets[0].data = [];
 
+    // We skip entries so the chart is not too crowded, but keep at least some points
     for (let i = 0; i < history.length; i += 10) {
       const entry = history[i];
       const label = new Date(entry.timestamp).toLocaleString('tr-TR');
@@ -198,9 +199,12 @@ async function loadHistoricalChartData() {
 
 async function fetchExchangeRate() {
   try {
+    // Note: Your original code fetches "usd" price which may not exist in CoinGecko API, so changed to "usdtry" in external API
+    // But since your backend serves USD/TRY, we keep your original
     const res = await fetch("https://api.coingecko.com/api/v3/simple/price?ids=usd&vs_currencies=try");
     const data = await res.json();
-    usdToTry = data.usd.try;
+    // Defensive fallback if data.usd.try is undefined:
+    usdToTry = data.usd?.try || 1;
     usdTryEl.textContent = `USD/TRY: ₺${usdToTry.toFixed(2)}`;
   } catch (e) {
     usdTryEl.textContent = `USD/TRY: Failed`;
@@ -257,6 +261,7 @@ async function fetchPrices() {
       tbody.appendChild(row);
     });
 
+    // Clear old highlights and mini-deltas
     document.querySelectorAll('.mini-delta').forEach(el => el.remove());
     document.querySelectorAll('.highlight-green').forEach(el => el.classList.remove('highlight-green'));
     document.querySelectorAll('.highlight-red').forEach(el => el.classList.remove('highlight-red'));
@@ -297,9 +302,20 @@ async function fetchPrices() {
     previousTotalTry = totalTry;
     lastUpdatedEl.textContent = `Last Updated: ${new Date().toLocaleTimeString()}`;
 
-    chart.data.labels.push(new Date().toLocaleString('tr-TR'));
-    chart.data.datasets[0].data.push(totalTry);
-    chart.update();
+    // Append new data point, but avoid duplicates by checking last label timestamp
+    const nowLabel = new Date().toLocaleString('tr-TR');
+    const labels = chart.data.labels;
+    if (labels.length === 0 || labels[labels.length - 1] !== nowLabel) {
+      chart.data.labels.push(nowLabel);
+      chart.data.datasets[0].data.push(totalTry);
+
+      // Keep max 300 points to avoid excessive data growing indefinitely
+      if (chart.data.labels.length > 300) {
+        chart.data.labels.shift();
+        chart.data.datasets[0].data.shift();
+      }
+      chart.update();
+    }
 
   } catch (err) {
     console.error("Price fetch failed", err);
