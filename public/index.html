@@ -1,82 +1,64 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Crypto Portfolio Tracker</title>
-<style>
-  body {
-    background-color: #121212;
-    color: #eee;
-    font-family: Arial, sans-serif;
-    margin: 20px;
-  }
-  h1 {
-    text-align: center;
-    margin-bottom: 0.2em;
-  }
-  #summary {
-    text-align: center;
-    margin-bottom: 1em;
-  }
-  #usdTryRate, #totalTry, #tryDelta, #lastUpdated {
-    margin: 0 10px;
-    font-weight: bold;
-  }
-  table {
-    width: 100%;
-    border-collapse: collapse;
-    background-color: #222;
-  }
-  th, td {
-    padding: 8px 12px;
-    border: 1px solid #444;
-    text-align: left;
-  }
-  th {
-    cursor: pointer;
-    background-color: #333;
-    user-select: none;
-  }
-  th:hover {
-    background-color: #555;
-  }
-  .coin-logo {
-    width: 20px;
-    height: 20px;
-    vertical-align: middle;
-    margin-right: 6px;
-  }
-  .green {
-    color: #0f0;
-  }
-  .red {
-    color: #f33;
-  }
-  .try-cell {
-    position: relative;
-  }
-  .mini-delta {
-    font-size: 0.75em;
-    margin-left: 6px;
-    vertical-align: super;
-  }
-  .highlight-green {
-    background-color: rgba(0, 255, 0, 0.2);
-  }
-  .highlight-red {
-    background-color: rgba(255, 0, 0, 0.2);
-  }
-  #valueChart {
-    display: block;
-    max-width: 900px;
-    margin: 20px auto;
-    background-color: #222;
-    border: 1px solid #444;
-    padding: 10px;
-    border-radius: 6px;
-  }
-</style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Crypto Portfolio Tracker</title>
+  <style>
+    body {
+      background-color: #121212;
+      color: #eee;
+      font-family: Arial, sans-serif;
+      margin: 20px;
+    }
+    h1 { text-align: center; margin-bottom: 0.2em; }
+    #summary { text-align: center; margin-bottom: 1em; }
+    #usdTryRate, #totalTry, #tryDelta, #lastUpdated {
+      margin: 0 10px;
+      font-weight: bold;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background-color: #222;
+    }
+    th, td {
+      padding: 8px 12px;
+      border: 1px solid #444;
+      text-align: left;
+    }
+    th {
+      cursor: pointer;
+      background-color: #333;
+      user-select: none;
+    }
+    th:hover { background-color: #555; }
+    .coin-logo {
+      width: 20px;
+      height: 20px;
+      vertical-align: middle;
+      margin-right: 6px;
+    }
+    .green { color: #0f0; }
+    .red { color: #f33; }
+    .try-cell { position: relative; }
+    .mini-delta {
+      font-size: 0.75em;
+      margin-left: 6px;
+      vertical-align: super;
+    }
+    .highlight-green { background-color: rgba(0, 255, 0, 0.2); }
+    .highlight-red { background-color: rgba(255, 0, 0, 0.2); }
+    #valueChart {
+      display: block;
+      max-width: 900px;
+      margin: 20px auto;
+      background-color: #222;
+      border: 1px solid #444;
+      padding: 10px;
+      border-radius: 6px;
+    }
+  </style>
 </head>
 <body>
 
@@ -170,10 +152,16 @@ async function loadHistoricalChartData() {
     const res = await fetch('https://crypto-portfolio-tracker-1.onrender.com/history');
     const history = await res.json();
 
-    history.forEach(entry => {
-      chart.data.labels.push(new Date(entry.timestamp).toLocaleTimeString());
+    chart.data.labels = [];
+    chart.data.datasets[0].data = [];
+
+    // Downsampling: one out of every 10 points
+    for (let i = 0; i < history.length; i += 10) {
+      const entry = history[i];
+      const label = new Date(entry.timestamp).toLocaleString('tr-TR');
+      chart.data.labels.push(label);
       chart.data.datasets[0].data.push(entry.total_try);
-    });
+    }
 
     chart.update();
   } catch (err) {
@@ -243,7 +231,6 @@ async function fetchPrices() {
       tbody.appendChild(row);
     });
 
-    // Remove previous mini deltas and highlights
     document.querySelectorAll('.mini-delta').forEach(el => el.remove());
     document.querySelectorAll('.highlight-green').forEach(el => el.classList.remove('highlight-green'));
     document.querySelectorAll('.highlight-red').forEach(el => el.classList.remove('highlight-red'));
@@ -284,8 +271,7 @@ async function fetchPrices() {
     previousTotalTry = totalTry;
     lastUpdatedEl.textContent = `Last Updated: ${new Date().toLocaleTimeString()}`;
 
-    // Update chart
-    chart.data.labels.push(new Date().toLocaleTimeString());
+    chart.data.labels.push(new Date().toLocaleString('tr-TR'));
     chart.data.datasets[0].data.push(totalTry);
     chart.update();
 
@@ -316,7 +302,6 @@ function sortTable(colIndex) {
   rows.forEach(row => tbody.appendChild(row));
 }
 
-// Initialize
 (async () => {
   await loadHistoricalChartData();
   await fetchPrices();
