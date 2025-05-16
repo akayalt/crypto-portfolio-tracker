@@ -113,29 +113,17 @@
 </div>
 
 <div class="scroll-wrapper">
-  <canvas id="valueChart" width="1200" height="400"></canvas>
+  <div id="valueChart" style="height: 400px;"></div>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
 <script>
 const holdings = {
-  "algorand": 165.5111,
-  "cosmos": 1.5111,
-  "audius": 208.4357,
-  "bitcoin": 0.03000265,
-  "compound-governance-token": 0.03095203,
-  "dogecoin": 100.0,
-  "polkadot": 0.3309,
-  "eos": 2.56,
-  "ethereum": 0.31216363,
-  "filecoin": 0.1479,
-  "hedera-hashgraph": 2415.11,
-  "decentraland": 11.6838,
-  "neo": 0.247,
-  "pepe": 1013000.0,
-  "shiba-inu": 2108063.0,
-  "ripple": 580.6248,
-  "tezos": 1.610784
+  "algorand": 165.5111, "cosmos": 1.5111, "audius": 208.4357, "bitcoin": 0.03000265,
+  "compound-governance-token": 0.03095203, "dogecoin": 100.0, "polkadot": 0.3309,
+  "eos": 2.56, "ethereum": 0.31216363, "filecoin": 0.1479, "hedera-hashgraph": 2415.11,
+  "decentraland": 11.6838, "neo": 0.247, "pepe": 1013000.0, "shiba-inu": 2108063.0,
+  "ripple": 580.6248, "tezos": 1.610784
 };
 
 let previousPrices = {};
@@ -143,6 +131,8 @@ let previousTryValues = {};
 let usdToTry = 1;
 let previousTotalTry = null;
 let lastDelta = null;
+let apexChart;
+let chartData = [];
 
 const tbody = document.querySelector('#cryptoTable tbody');
 const totalTryEl = document.getElementById("totalTry");
@@ -150,48 +140,51 @@ const tryDeltaEl = document.getElementById("tryDelta");
 const lastUpdatedEl = document.getElementById("lastUpdated");
 const usdTryEl = document.getElementById("usdTryRate");
 
-const chart = new Chart(document.getElementById("valueChart").getContext("2d"), {
-  type: 'line',
-  data: {
-    labels: [],
-    datasets: [{
-      label: 'Total Value (TRY)',
-      data: [],
-      borderColor: '#00ff00',
-      backgroundColor: 'rgba(0,255,0,0.1)',
-      tension: 0.1
-    }]
-  },
-  options: {
-    responsive: true,
-    animation: false,
-    plugins: {
-      legend: { labels: { color: "#fff" } }
-    },
-    scales: {
-      x: { ticks: { color: "#aaa" } },
-      y: { ticks: { color: "#aaa" } }
-    }
-  }
-});
-
 async function loadHistoricalChartData() {
   try {
     const res = await fetch('https://crypto-portfolio-tracker-1.onrender.com/history');
     const history = await res.json();
 
-    chart.data.labels = [];
-    chart.data.datasets[0].data = [];
+    chartData = history.filter((_, i) => i % 10 === 0).map(entry => {
+      const date = new Date(entry.timestamp);
+      const formatted = date.toLocaleDateString('tr-TR').replace(/\//g, '.') + ' ' +
+                        date.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
+      return {
+        x: formatted,
+        y: entry.total_try
+      };
+    });
 
-    // We skip entries so the chart is not too crowded, but keep at least some points
-    for (let i = 0; i < history.length; i += 10) {
-      const entry = history[i];
-      const label = new Date(entry.timestamp).toLocaleString('tr-TR');
-      chart.data.labels.push(label);
-      chart.data.datasets[0].data.push(entry.total_try);
-    }
+    apexChart = new ApexCharts(document.querySelector("#valueChart"), {
+      chart: {
+        type: 'line',
+        height: 400,
+        background: '#222',
+        foreColor: '#eee',
+        toolbar: { show: true, tools: { zoom: true, pan: true, reset: true } },
+        zoom: { enabled: true, type: 'x', autoScaleYaxis: true }
+      },
+      series: [{ name: 'Total Value (TRY)', data: chartData }],
+      xaxis: {
+        type: 'category',
+        labels: {
+          style: { colors: '#aaa' }
+        }
+      },
+      yaxis: {
+        labels: {
+          style: { colors: '#aaa' },
+          formatter: function (val) {
+            return val % 1 === 0 ? val.toLocaleString('tr-TR', { maximumFractionDigits: 0 }) : val.toLocaleString('tr-TR', { maximumFractionDigits: 2 });
+          }
+        }
+      },
+      stroke: { curve: 'smooth', width: 2 },
+      tooltip: { theme: 'dark' },
+      annotations: { yaxis: [] }
+    });
 
-    chart.update();
+    apexChart.render();
   } catch (err) {
     console.error("Failed to load chart data", err);
   }
@@ -199,11 +192,8 @@ async function loadHistoricalChartData() {
 
 async function fetchExchangeRate() {
   try {
-    // Note: Your original code fetches "usd" price which may not exist in CoinGecko API, so changed to "usdtry" in external API
-    // But since your backend serves USD/TRY, we keep your original
     const res = await fetch("https://api.coingecko.com/api/v3/simple/price?ids=usd&vs_currencies=try");
     const data = await res.json();
-    // Defensive fallback if data.usd.try is undefined:
     usdToTry = data.usd?.try || 1;
     usdTryEl.textContent = `USD/TRY: ₺${usdToTry.toFixed(2)}`;
   } catch (e) {
@@ -235,7 +225,8 @@ async function fetchPrices() {
 
       let trend = "";
       if (previousPrices[id] !== undefined) {
-        trend = priceUsd > previousPrices[id] ? `<span class="green">▲</span>` : priceUsd < previousPrices[id] ? `<span class="red">▼</span>` : "";
+        trend = priceUsd > previousPrices[id] ? `<span class="green">▲</span>` :
+                priceUsd < previousPrices[id] ? `<span class="red">▼</span>` : "";
       }
 
       const valueChange = previousTryValues[id] !== undefined ? valueTry - previousTryValues[id] : 0;
@@ -249,22 +240,21 @@ async function fetchPrices() {
         : `$${priceUsd.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
       const row = document.createElement('tr');
-      const tryCellId = `try-${id}`;
       row.innerHTML = `
         <td>${trend}</td>
-        <td><img src="${coin.image}" alt="${coin.name} logo" class="coin-logo">${coin.name}</td>
+        <td><img src="${coin.image}" alt="${coin.name}" class="coin-logo">${coin.name}</td>
         <td>${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 8 })}</td>
         <td>${priceFormatted}</td>
         <td>$${valueUsd.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-        <td id="${tryCellId}" class="try-cell">₺${valueTry.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+        <td id="try-${id}" class="try-cell">₺${valueTry.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
       `;
       tbody.appendChild(row);
     });
 
-    // Clear old highlights and mini-deltas
     document.querySelectorAll('.mini-delta').forEach(el => el.remove());
-    document.querySelectorAll('.highlight-green').forEach(el => el.classList.remove('highlight-green'));
-    document.querySelectorAll('.highlight-red').forEach(el => el.classList.remove('highlight-red'));
+    document.querySelectorAll('.highlight-green, .highlight-red').forEach(el => {
+      el.classList.remove('highlight-green', 'highlight-red');
+    });
 
     const filteredChanges = tryChanges.filter(x => x.delta !== 0);
     if (filteredChanges.length >= 1) {
@@ -279,7 +269,6 @@ async function fetchPrices() {
         deltaSpan.textContent = `(${delta >= 0 ? '+' : '-'}₺${Math.abs(delta).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})`;
         cell.appendChild(deltaSpan);
         cell.classList.add(delta >= 0 ? 'highlight-green' : 'highlight-red');
-
         setTimeout(() => {
           deltaSpan.remove();
           cell.classList.remove('highlight-green', 'highlight-red');
@@ -302,21 +291,24 @@ async function fetchPrices() {
     previousTotalTry = totalTry;
     lastUpdatedEl.textContent = `Last Updated: ${new Date().toLocaleTimeString()}`;
 
-    // Append new data point, but avoid duplicates by checking last label timestamp
     const nowLabel = new Date().toLocaleString('tr-TR');
-    const labels = chart.data.labels;
-    if (labels.length === 0 || labels[labels.length - 1] !== nowLabel) {
-      chart.data.labels.push(nowLabel);
-      chart.data.datasets[0].data.push(totalTry);
+    chartData.push({ x: nowLabel, y: totalTry });
 
-      // Keep max 300 points to avoid excessive data growing indefinitely
-      if (chart.data.labels.length > 300) {
-        chart.data.labels.shift();
-        chart.data.datasets[0].data.shift();
+    apexChart.updateSeries([{ name: "Total Value (TRY)", data: chartData }]);
+    apexChart.updateOptions({
+      annotations: {
+        yaxis: [{
+          y: totalTry,
+          borderColor: '#00E396',
+          strokeDashArray: 4,
+          label: {
+            borderColor: '#00E396',
+            style: { color: '#000', background: '#00E396' },
+            text: `₺${totalTry.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+          }
+        }]
       }
-      chart.update();
-    }
-
+    });
   } catch (err) {
     console.error("Price fetch failed", err);
   }
@@ -330,16 +322,10 @@ function sortTable(colIndex) {
     const bText = b.children[colIndex].textContent.replace(/[^\d\.-]/g, '');
     const aVal = isNaN(parseFloat(aText)) ? aText : parseFloat(aText);
     const bVal = isNaN(parseFloat(bText)) ? bText : parseFloat(bText);
-
-    if (typeof aVal === "number" && typeof bVal === "number") {
-      return sortDirection ? aVal - bVal : bVal - aVal;
-    } else {
-      return sortDirection
-        ? aVal.toString().localeCompare(bVal)
-        : bVal.toString().localeCompare(aVal);
-    }
+    return sortDirection
+      ? (typeof aVal === "number" ? aVal - bVal : aVal.localeCompare(bVal))
+      : (typeof aVal === "number" ? bVal - aVal : bVal.localeCompare(aVal));
   });
-
   sortDirection = !sortDirection;
   rows.forEach(row => tbody.appendChild(row));
 }
