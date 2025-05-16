@@ -1,27 +1,39 @@
 const express = require('express');
 const axios = require('axios');
-const sqlite3 = require('sqlite3').verbose();
 const path = require('path');
 const cors = require('cors');
+const mongoose = require('mongoose');
+require('dotenv').config();
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Enable CORS for API requests from frontend
+// Enable CORS
 app.use(cors());
 
-// Serve static files (your HTML, CSS, JS)
+// Serve static files
 app.use(express.static(path.join(__dirname, 'public')));
 
-// SQLite DB
-const db = new sqlite3.Database('./data.db');
-db.run(`CREATE TABLE IF NOT EXISTS total_values (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  timestamp TEXT,
-  total_try REAL
-)`);
+// MongoDB connection
+const mongoUri = process.env.MONGODB_URI || 'your-mongodb-uri-here';
+mongoose.connect(mongoUri, {
+  useNewUrlParser: true,
+  useUnifiedTopology: true,
+}).then(() => {
+  console.log('Connected to MongoDB Atlas');
+}).catch(err => {
+  console.error('MongoDB connection error:', err);
+});
 
-// Your coin holdings
+// Mongoose schema and model
+const totalValueSchema = new mongoose.Schema({
+  timestamp: { type: Date, required: true },
+  total_try: { type: Number, required: true }
+});
+
+const TotalValue = mongoose.model('TotalValue', totalValueSchema);
+
+// Your coin holdings (same as before)
 const holdings = {
   "algorand": 165.5111,
   "cosmos": 1.5111,
@@ -61,12 +73,16 @@ async function fetchAndStoreTotalTry() {
       totalTry += holdings[coin.id] * priceUsd * usdToTry;
     });
 
-    const timestamp = new Date().toISOString();
-    db.run(`INSERT INTO total_values (timestamp, total_try) VALUES (?, ?)`, [timestamp, totalTry]);
+    const totalValueEntry = new TotalValue({
+      timestamp: new Date(),
+      total_try: totalTry
+    });
 
-    console.log(`[${timestamp}] Total TRY: ₺${totalTry.toFixed(2)}`);
+    await totalValueEntry.save();
+
+    console.log(`[${totalValueEntry.timestamp.toISOString()}] Total TRY: ₺${totalTry.toFixed(2)}`);
   } catch (err) {
-    console.error('Fetch failed:', err.message);
+    console.error('Fetch and store failed:', err.message);
   }
 }
 
@@ -75,11 +91,13 @@ setInterval(fetchAndStoreTotalTry, 10000);
 fetchAndStoreTotalTry();
 
 // API endpoint to get historical data
-app.get('/history', (req, res) => {
-  db.all(`SELECT * FROM total_values ORDER BY timestamp ASC`, (err, rows) => {
-    if (err) return res.status(500).json({ error: err.message });
-    res.json(rows);
-  });
+app.get('/history', async (req, res) => {
+  try {
+    const history = await TotalValue.find({}).sort({ timestamp: 1 });
+    res.json(history);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // Serve index.html on root
