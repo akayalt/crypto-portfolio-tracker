@@ -294,8 +294,13 @@ async function fetchPrices() {
     const nowLabel = new Date().toLocaleString('tr-TR');
     chartData.push({ x: nowLabel, y: totalTry });
 
-    apexChart.updateSeries([{ name: "Total Value (TRY)", data: chartData }]);
+    const currentXAxis = apexChart.w.globals.minX && apexChart.w.globals.maxX
+      ? { min: apexChart.w.globals.minX, max: apexChart.w.globals.maxX }
+      : undefined;
+
+    apexChart.updateSeries([{ name: "Total Value (TRY)", data: chartData }], false);
     apexChart.updateOptions({
+      xaxis: currentXAxis ? { ...currentXAxis } : {},
       annotations: {
         yaxis: [{
           y: totalTry,
@@ -304,7 +309,8 @@ async function fetchPrices() {
           label: {
             borderColor: '#00E396',
             style: { color: '#000', background: '#00E396' },
-            text: `₺${totalTry.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+            text: `₺${totalTry.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+            position: 'left'
           }
         }]
       }
