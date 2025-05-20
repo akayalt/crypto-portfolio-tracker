@@ -161,8 +161,8 @@ async function loadHistoricalChartData() {
         height: 400,
         background: '#222',
         foreColor: '#eee',
-        toolbar: { show: true, tools: { zoom: true, pan: true, reset: true } },
-        zoom: { enabled: true, type: 'x', autoScaleYaxis: true }
+        toolbar: { show: true, tools: { zoom: false, pan: true, reset: true } },
+        zoom: { enabled: false }
       },
       series: [{ name: 'Total Value (TRY)', data: chartData }],
       xaxis: {
@@ -294,13 +294,8 @@ async function fetchPrices() {
     const nowLabel = new Date().toLocaleString('tr-TR');
     chartData.push({ x: nowLabel, y: totalTry });
 
-    const currentXAxis = apexChart.w.globals.minX && apexChart.w.globals.maxX
-      ? { min: apexChart.w.globals.minX, max: apexChart.w.globals.maxX }
-      : undefined;
-
     apexChart.updateSeries([{ name: "Total Value (TRY)", data: chartData }], false);
     apexChart.updateOptions({
-      xaxis: currentXAxis ? { ...currentXAxis } : {},
       annotations: {
         yaxis: [{
           y: totalTry,
@@ -315,6 +310,7 @@ async function fetchPrices() {
         }]
       }
     });
+
   } catch (err) {
     console.error("Price fetch failed", err);
   }
