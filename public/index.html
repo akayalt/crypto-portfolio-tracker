@@ -192,13 +192,23 @@ async function loadHistoricalChartData() {
 
 async function fetchExchangeRate() {
   try {
-    const res = await fetch("https://api.coingecko.com/api/v3/simple/price?ids=usd&vs_currencies=try");
+    const res = await fetch(
+      "https://api.coingecko.com/api/v3/simple/price?ids=tether&vs_currencies=try"
+    );
+
     const data = await res.json();
-    usdToTry = data.usd?.try || 1;
+
+    const rate = data?.tether?.try;
+
+    if (!rate) throw new Error("Invalid USDT rate");
+
+    usdToTry = rate;
+
     usdTryEl.textContent = `USD/TRY: ₺${usdToTry.toFixed(2)}`;
+
   } catch (e) {
-    usdTryEl.textContent = `USD/TRY: Failed`;
-    console.error("Exchange rate fetch failed", e);
+    usdTryEl.textContent = "USD/TRY: Error";
+    console.error("USDT rate failed:", e);
   }
 }
 
